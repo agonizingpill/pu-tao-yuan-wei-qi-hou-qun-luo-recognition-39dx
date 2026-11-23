@@ -91,18 +91,26 @@ def publish(db, run_id, actor, reason, affected):
     if affected:
         db.execute("UPDATE irrigation_round SET state='needs_replan' WHERE id=ANY(%s)",
                    ([item['id'] for item in affected],))
+    # 新标签生效只刷新候补队列的排队分，不改动已领额度轮次的标签与分钟
+    waitlisted = db.execute('''
+        UPDATE irrigation_round r SET warm_probability=l.warm_probability
+        FROM climate_label l
+        WHERE r.state='waitlisted' AND l.block_id=r.block_id AND l.state='active'
+        RETURNING r.code
+    ''').fetchall()
     db.execute("UPDATE climate_run SET status='effective' WHERE id=%s", (run_id,))
-    event(db, actor, 'labels_published', run_id, reason=reason, impact=[item['code'] for item in affected])
+    event(db, actor, 'labels_published', run_id, reason=reason, impact=[item['code'] for item in affected],
+          waitlist_refreshed=[item['code'] for item in waitlisted])
 
 
 def store_fit(db, run_id, result):
     for item in result['assignments']:
         block_id = item['block_id']
         db.execute('''
-            INSERT INTO climate_label(block_id,run_id,revision,profile,confidence,state)
-            SELECT %s,%s,COALESCE(max(revision),0)+1,%s,%s,'proposed'
+            INSERT INTO climate_label(block_id,run_id,revision,profile,confidence,warm_probability,state)
+            SELECT %s,%s,COALESCE(max(revision),0)+1,%s,%s,%s,'proposed'
             FROM climate_label WHERE block_id=%s
-        ''', (block_id, run_id, item['profile'], item['confidence'], block_id))
+        ''', (block_id, run_id, item['profile'], item['confidence'], item['warm_probability'], block_id))
     impacted = affected_rounds(db, run_id)
     db.execute('UPDATE climate_run SET status=%s,result=%s,error=NULL,attempts=attempts+1 WHERE id=%s',
                ('review' if impacted else 'queued', Jsonb(result), run_id))

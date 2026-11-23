@@ -52,8 +52,8 @@ async function render(message='') {
       queued = run?.status === 'queued';
       body = clusterPage(runs, run, labels, editable, supervisor);
     } else if (page === 'irrigation') {
-      const [blocks, rounds] = await Promise.all([api('/blocks'),api('/rounds')]);
-      body = irrigationPage(blocks, rounds, rounds.find(r => r.id === state.round), editable, supervisor);
+      const [blocks, rounds, quotas] = await Promise.all([api('/blocks'),api('/rounds'),api('/quota')]);
+      body = irrigationPage(blocks, rounds, quotas, rounds.find(r => r.id === state.round), editable, supervisor);
     } else {
       const [notes, rounds] = await Promise.all([api('/harvest'),api('/rounds')]);
       body = harvestPage(notes, rounds, editable);
@@ -110,7 +110,14 @@ async function mutate(action, data, id) {
     case 'schedule': {
       const round = await api('/rounds', {...numeric(data,'block_id'), starts_at:chinaTime(data.starts_at)});
       state.round = round.id;
-      return `已排 ${round.code}，${round.minutes} 分钟。`;
+      return round.state === 'waitlisted'
+        ? `当天限供分钟不足，${round.code} 候补第 ${round.queue_pos} 位。`
+        : `已排 ${round.code}，${round.minutes} 分钟。`;
+    }
+    case 'quota': {
+      const quota = await api('/quota', numeric(data,'cap_minutes'));
+      return `${quota.day} 上限已定为 ${quota.cap_minutes} 分钟，已用 ${quota.used_minutes} 分钟` +
+        (quota.promoted?.length ? `，递补 ${quota.promoted.join('、')}` : '') + '。';
     }
     case 'replan':
       await api(`/rounds/${id}/replan`,{...data,starts_at:chinaTime(data.starts_at)});

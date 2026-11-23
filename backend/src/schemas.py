@@ -62,6 +62,11 @@ class ScheduleInput(Input):
     starts_at: AwareDatetime
 
 
+class QuotaInput(Input):
+    day: date
+    cap_minutes: int = Field(ge=1, le=1440)
+
+
 class ReplanInput(Input):
     starts_at: AwareDatetime
     reason: Narrative

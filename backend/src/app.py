@@ -176,6 +176,19 @@ def retry(run_id: int, user=editable):
     return notify(run)
 
 
+@app.get('/quota')
+def quota(_user=readable):
+    with connect() as db:
+        return irrigation.quota_list(db)
+
+
+@app.post('/quota')
+def set_quota(data: schemas.QuotaInput, user=supervised):
+    with connect() as db:
+        lock_ledger(db)
+        return irrigation.set_quota(db, data.day, data.cap_minutes, user['name'])
+
+
 @app.get('/rounds')
 def rounds(_user=readable):
     with connect() as db:

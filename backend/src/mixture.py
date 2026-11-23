@@ -32,12 +32,14 @@ def fit_profiles(snapshot):
     profile_order = {1: [Profile.BALANCED], 2: [Profile.COOL, Profile.WARM],
                      3: [Profile.COOL, Profile.BALANCED, Profile.WARM]}[model.n_components]
     names = dict(zip(order, profile_order))
+    warm_component = next((i for i, name in names.items() if name == Profile.WARM), None)
     posterior = model.predict_proba(matrix)
     return {
         'chosen_k': model.n_components, 'bic': scores, 'seed': SEED,
         'covariance_type': 'diag', 'reg_covar': REG_COVAR, 'n_init': 10, 'features': FEATURES,
         'centroids': {names[i]: dict(zip(FEATURES, row.tolist())) for i, row in enumerate(centroids)},
         'assignments': [dict(block_id=item['block_id'], code=item['code'],
-                             profile=names[int(np.argmax(p))], confidence=float(max(p)))
+                             profile=names[int(np.argmax(p))], confidence=float(max(p)),
+                             warm_probability=float(p[warm_component]) if warm_component is not None else 0.0)
                         for item, p in zip(snapshot, posterior)],
     }
